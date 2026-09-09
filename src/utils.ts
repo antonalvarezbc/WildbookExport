@@ -46,9 +46,22 @@ const downloadCropAndSaveImage = async (
   await cropAndSaveImage(buffer, cropRectangle, outputPath);
 };
 
+// Cell values arrive as strings from .xls/.xlsx, but SheetJS type-infers CSV cells: "TRUE"
+// becomes a boolean and a media asset named "00123" becomes the number 123. Everything below
+// compares against strings, so normalize before using a value.
+const asText = (value: unknown): string =>
+  value === undefined || value === null ? "" : String(value).trim();
+
 const readExcelToJSON = ({ filePath, sheetNum }: { filePath: string; sheetNum: number }): any[] => {
-  const workbook: XLSX.WorkBook = XLSX.readFile(filePath);
-  return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[sheetNum]], { defval: "" });
+  // raw: true disables SheetJS' type inference when parsing plain-text (CSV) exports
+  const workbook: XLSX.WorkBook = XLSX.readFile(filePath, { raw: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[sheetNum]];
+
+  if (!sheet) {
+    throw new Error(`Sheet ${sheetNum} not found in ${filePath}`);
+  }
+
+  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
 };
 
 const shortlistAnnotations = (
@@ -195,42 +208,57 @@ const getGroupedAnnotationsFromExcel = ({
   
     for (let i = 0; i <= maxAnnotationIndex; i++) {
       
+      const matchAgainst = asText(originalRow[`Annotation${i}.MatchAgainst`]).toLowerCase();
+      const viewPoint = asText(originalRow[`Annotation${i}.ViewPoint`]);
+      const imageUrl = asText(originalRow[`Encounter.mediaAsset${i}.imageUrl`]);
+      const bbox = asText(originalRow[`Annotation${i}.bbox`]);
+
       if (
-        originalRow[`Annotation${i}.MatchAgainst`] !== 'true' 
-        || originalRow[`Annotation${i}.ViewPoint`] ==='' 
-        || originalRow[`Encounter.mediaAsset${i}.imageUrl`] ===''
-        || originalRow[`Annotation${i}.bbox`] ===''
-        || originalRow[`Annotation${i}.bbox`] ==='null'
+        matchAgainst !== 'true'
+        || viewPoint ===''
+        || imageUrl ===''
+        || bbox ===''
+        || bbox.toLowerCase() ==='null'
       )
       {
         continue;
       }
-      
+
       const newRow = { ...originalRow }; // Clone the original row
 
       // Replace Annotation0.MatchAgainst with current AnnotationX.MatchAgainst
-      newRow["Annotation0.MatchAgainst"] = originalRow[`Annotation${i}.MatchAgainst`];
-      newRow["Encounter.mediaAsset0"] = originalRow[`Encounter.mediaAsset${i}`];
-      newRow["Annotation0.ViewPoint"] = originalRow[`Annotation${i}.ViewPoint`];
-      newRow["Encounter.mediaAsset0.imageUrl"] = originalRow[`Encounter.mediaAsset${i}.imageUrl`];
-      newRow["Annotation0.bbox"] = originalRow[`Annotation${i}.bbox`];
+      newRow["Annotation0.MatchAgainst"] = matchAgainst;
+      newRow["Encounter.mediaAsset0"] = asText(originalRow[`Encounter.mediaAsset${i}`]);
+      newRow["Annotation0.ViewPoint"] = viewPoint;
+      newRow["Encounter.mediaAsset0.imageUrl"] = imageUrl;
+      newRow["Annotation0.bbox"] = bbox;
       if (i!==0){
          newRow["Annotation.extrarow"] = 'true';
       }
 
       // Handle case if Name0.value not in newRow
-      if (newRow["Name0.value"] === undefined) {
-        newRow["Name0.value"] = UNIDENTIFIED_ANNOTATIONS_FOLDER;
-      }
-      else{
-        newRow["Name0.value"] = newRow["Name0.value"].trim() === "" ? UNIDENTIFIED_ANNOTATIONS_FOLDER : newRow["Name0.value"].trim();
-      }
-  
+      const individualId = asText(originalRow["Name0.value"]);
+      newRow["Name0.value"] = individualId === "" ? UNIDENTIFIED_ANNOTATIONS_FOLDER : individualId;
+
       processedRows.push(newRow);
     }
   });
 
   // TODO: validate at runtime that ungroupedJSON is really of type AnnotationRow[], maybe using something like https://github.com/gcanti/io-ts
+
+  if (processedRows.length === 0) {
+    // Distinguish "wrong kind of export" (e.g. a plain Encounter Search export) from
+    // "right export, but Wildbook left the annotation fields empty".
+    const hasAnnotationColumns = ungroupedJSON.some((row) =>
+      Object.keys(row).some((key) => /^Annotation\d+\.bbox$/.test(key)),
+    );
+
+    throw new Error(
+      hasAnnotationColumns
+        ? "It has annotation columns, but no row has a usable annotation (ViewPoint, bbox and imageUrl filled in, with MatchAgainst set to true)."
+        : "No Annotation<N>.bbox column found. In Wildbook, use Search > Encounter Search > Export > Encounter Annotation Export.",
+    );
+  }
 
   return Object.entries(_.groupBy(processedRows, "Name0.value"))
     .filter(
@@ -286,7 +314,18 @@ const performFinalSave = async (submitData: SubmitData, originalXlsx: string): P
   try {
     annotationsWithIds = getGroupedAnnotationsFromExcel(submitData);
   } catch (error) {
-    return { success: false, message: `Invalid or unsupported Wildbook annotation export: ${submitData.inputXlsx}.` };
+    return {
+      success: false,
+      message: `Invalid or unsupported Wildbook annotation export: ${submitData.inputXlsx}. ${error.message}`,
+    };
+  }
+
+  if (annotationsWithIds.length === 0) {
+    return {
+      success: false,
+      message:
+        "No annotations to download: the export only contains unidentified encounters, and they are currently excluded.",
+    };
   }
 
   const errors: { [key: string]: AnnotationsWithId } = {}; // can be an array really but object property lookups are faster/more convenient than linear search
@@ -360,9 +399,11 @@ const performFinalSave = async (submitData: SubmitData, originalXlsx: string): P
   const errorsExcelJSON: AnnotationRow[] = _.flatMap(Object.values(errors), "annotationRows");
 
   const temp: path.ParsedPath = path.parse(filenameToBaseErrorFileAndFolderNameOn);
+  // Always .xlsx, whatever the input was: the resume file needs a second sheet for the resume
+  // information, and a .csv can only hold one sheet.
   const errorsExcelFilePath = path.join(
     wrappingFolder,
-    temp.name + "." + RESUME_FILE_EXTENSION_PREFIX + temp.ext,
+    temp.name + "." + RESUME_FILE_EXTENSION_PREFIX + ".xlsx",
   );
   fs.existsSync(errorsExcelFilePath) && fs.unlinkSync(errorsExcelFilePath); // delete the file if it already exists
 
