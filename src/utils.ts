@@ -286,7 +286,7 @@ const performFinalSave = async (submitData: SubmitData, originalXlsx: string): P
   try {
     annotationsWithIds = getGroupedAnnotationsFromExcel(submitData);
   } catch (error) {
-    return { success: false, message: `Malformed excel file: ${submitData.inputXlsx}.` };
+    return { success: false, message: `Invalid or unsupported Wildbook annotation export: ${submitData.inputXlsx}.` };
   }
 
   const errors: { [key: string]: AnnotationsWithId } = {}; // can be an array really but object property lookups are faster/more convenient than linear search
@@ -398,7 +398,7 @@ const showOpenDialog = async (openDialogParams: OpenDialogParams): Promise<strin
   if (openDialogParams.type === "xls/xlsx") {
     result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
-      filters: [{ name: "Microsoft Excel File", extensions: ["xls", "xlsx"] }],
+      filters: [{ name: "Wildbook Annotation Export", extensions: ["xls", "xlsx", "csv"] }],
       defaultPath: openDialogParams.defaultPath,
     });
   } else if (openDialogParams.type === "directory") {
