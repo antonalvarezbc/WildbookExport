@@ -22,8 +22,14 @@ jobs:
             name: windows (.exe)
             artifact: wildex-windows
           - os: macos-latest
-            name: macos (.dmg)
-            artifact: wildex-macos
+            name: macos Apple Silicon (.dmg)
+            artifact: wildex-macos-arm64
+          # An arm64 build does not run on Intel Macs at all, and there is no translation the
+          # other way round. macos-15-intel is the last x86_64 image Actions offers (until
+          # August 2027); macos-13 was retired in December 2025.
+          - os: macos-15-intel
+            name: macos Intel (.dmg)
+            artifact: wildex-macos-intel
 
     steps:
       - uses: actions/checkout@v4
