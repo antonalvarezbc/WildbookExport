@@ -91,3 +91,10 @@ typings/
 # Electron-Forge
 out/
 !out/WildEx-darwin-x64/
+
+# Local Wildbook exports (may contain sensitive locality data)
+*.csv
+!src/**/*.csv
+
+# Claude Code local session files
+.claude/
