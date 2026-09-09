@@ -1,0 +1,76 @@
+name: Build
+
+on:
+  push:
+    branches: [main, release-cross-platform]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  make:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux (.deb / .rpm)
+            artifact: wildex-linux
+          - os: windows-latest
+            name: windows (.exe)
+            artifact: wildex-windows
+          - os: macos-latest
+            name: macos (.dmg)
+            artifact: wildex-macos
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # dpkg and fakeroot ship with the runner image, rpmbuild does not
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - run: npm ci
+
+      - run: npm run make
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            out/make/**/*.deb
+            out/make/**/*.rpm
+            out/make/**/*.exe
+            out/make/**/*.nupkg
+            out/make/**/*.dmg
+            out/make/**/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Attach installers to the release
+    needs: make
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes \
+            || echo "Release already exists, uploading assets to it"
+          find artifacts -type f -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME" --clobber
