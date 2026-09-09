@@ -12,6 +12,22 @@ import { join } from "path";
 
 const icon_path = join(__dirname, "src", "assets", "icon");
 
+const HOMEPAGE = "https://github.com/antonalvarezbc/WildbookExport";
+const MAINTAINER = "Anton Alvarez";
+const DESCRIPTION = "Download annotated images from a Wildbook Encounter Annotation Export";
+
+// Debian/RPM package names must be lowercase, but the packaged executable keeps the
+// productName casing, so `bin` has to match the binary electron-packager produces.
+const linuxPackageOptions = {
+  name: "wildex",
+  productName: "WildEx",
+  genericName: "Wildbook Annotation Exporter",
+  bin: "WildEx",
+  description: DESCRIPTION,
+  icon: icon_path + ".png",
+  homepage: HOMEPAGE,
+};
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: false,
@@ -22,30 +38,47 @@ const config: ForgeConfig = {
       new MakerSquirrel(
         {
           iconUrl:
-            "https://raw.githubusercontent.com/SalmanFarooqShiekh/wild-ex/main/src/assets/icon.ico",
+            "https://raw.githubusercontent.com/antonalvarezbc/WildbookExport/main/src/assets/icon.ico",
           setupIcon: icon_path + ".ico",
           skipUpdateIcon: true,
         },
         ["win32"],
       ),
 
-      new MakerDMG({
-        name: "WildEx",
-        icon: icon_path + ".icns",
-        overwrite: true,
-      }),
+      new MakerDMG(
+        {
+          name: "WildEx",
+          icon: icon_path + ".icns",
+          overwrite: true,
+        },
+        ["darwin"],
+      ),
 
       new MakerDeb(
         {
           options: {
-            maintainer: "Anton Alvarez",
-            homepage: "https://github.com/antonalvarezbc/WildbookExport",
+            ...linuxPackageOptions,
+            // inlined so the maker's literal union type applies instead of string[]
+            categories: ["Science", "Utility"],
+            maintainer: MAINTAINER,
           },
         },
         ["linux"],
       ),
 
-      new MakerRpm({}, ["linux"]),
+      new MakerRpm(
+        {
+          options: {
+            ...linuxPackageOptions,
+            categories: ["Science", "Utility"],
+            license: "MIT",
+          },
+        },
+        ["linux"],
+      ),
+
+      // portable fallback for users who can't install a .deb/.rpm, and for macOS CI artifacts
+      new MakerZIP({}, ["darwin", "linux"]),
     ],
   plugins: [
     new WebpackPlugin({
