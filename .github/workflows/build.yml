@@ -40,6 +40,12 @@ jobs:
 
       - run: npm ci
 
+      # appdmg is a darwin-only optionalDependency of electron-installer-dmg, and npm ci skips it
+      # because package-lock.json is generated on Linux. Without it MakerDMG fails to load.
+      - name: Install appdmg
+        if: runner.os == 'macOS'
+        run: npm install --no-save appdmg
+
       - run: npm run make
 
       - uses: actions/upload-artifact@v4
