@@ -1,8 +1,8 @@
 {
   "name": "WildEx",
   "productName": "WildEx",
-  "version": "1.0.0",
-  "description": "Download Annotated Images from Wildbook",
+  "version": "1.0.1",
+  "description": "Download Annotated Images from Wildbook - CSV compatible",
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",

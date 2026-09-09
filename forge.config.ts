@@ -18,19 +18,35 @@ const config: ForgeConfig = {
     icon: icon_path,
   },
   rebuildConfig: {},
-  makers: [
-    new MakerSquirrel(
-      {
-        iconUrl:
-          "https://raw.githubusercontent.com/SalmanFarooqShiekh/wild-ex/main/src/assets/icon.ico",
-        setupIcon: icon_path + ".ico",
-        skipUpdateIcon: true,
-      },
-      ["win32"],
-    ),
-    new MakerDMG({ name: "WildEx", icon: icon_path + ".icns", overwrite: true }),
-    // new MakerZIP({}),
-  ],
+    makers: [
+      new MakerSquirrel(
+        {
+          iconUrl:
+            "https://raw.githubusercontent.com/SalmanFarooqShiekh/wild-ex/main/src/assets/icon.ico",
+          setupIcon: icon_path + ".ico",
+          skipUpdateIcon: true,
+        },
+        ["win32"],
+      ),
+
+      new MakerDMG({
+        name: "WildEx",
+        icon: icon_path + ".icns",
+        overwrite: true,
+      }),
+
+      new MakerDeb(
+        {
+          options: {
+            maintainer: "Anton Alvarez",
+            homepage: "https://github.com/antonalvarezbc/WildbookExport",
+          },
+        },
+        ["linux"],
+      ),
+
+      new MakerRpm({}, ["linux"]),
+    ],
   plugins: [
     new WebpackPlugin({
       mainConfig,
