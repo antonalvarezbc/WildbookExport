@@ -1,6 +1,5 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
-import MakerDMG from "@electron-forge/maker-dmg";
 import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerRpm } from "@electron-forge/maker-rpm";
 import MakerZIP from "@electron-forge/maker-zip";
@@ -45,14 +44,9 @@ const config: ForgeConfig = {
         ["win32"],
       ),
 
-      new MakerDMG(
-        {
-          name: "WildEx",
-          icon: icon_path + ".icns",
-          overwrite: true,
-        },
-        ["darwin"],
-      ),
+      // No MakerDMG: it needs appdmg, a darwin-only optional dependency whose native fs-xattr
+      // module cannot be built on current macOS (node-gyp 9 imports Python's distutils, removed
+      // in Python 3.12). The CI builds the .dmg with hdiutil instead, which ships with macOS.
 
       new MakerDeb(
         {

@@ -40,13 +40,26 @@ jobs:
 
       - run: npm ci
 
-      # appdmg is a darwin-only optionalDependency of electron-installer-dmg, and npm ci skips it
-      # because package-lock.json is generated on Linux. Without it MakerDMG fails to load.
-      - name: Install appdmg
-        if: runner.os == 'macOS'
-        run: npm install --no-save appdmg
-
       - run: npm run make
+
+      # Forge's MakerDMG needs appdmg, which cannot be installed here (see forge.config.ts).
+      # hdiutil ships with macOS and builds the same drag-to-Applications image.
+      - name: Build .dmg
+        if: runner.os == 'macOS'
+        run: |
+          app=$(find out -maxdepth 2 -name 'WildEx.app' -print -quit)
+          if [ -z "$app" ]; then echo "No packaged WildEx.app found under out/"; exit 1; fi
+
+          version=$(node -p "require('./package.json').version")
+          arch=$(node -p "process.arch")
+          staging=$(mktemp -d)/WildEx
+
+          mkdir -p "$staging" out/make/dmg
+          cp -R "$app" "$staging/"
+          ln -s /Applications "$staging/Applications"
+
+          hdiutil create -volname WildEx -srcfolder "$staging" -ov -format UDZO \
+            "out/make/dmg/WildEx-${version}-${arch}.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
